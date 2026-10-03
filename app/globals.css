@@ -2019,3 +2019,50 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
     opacity: 0.6;
     cursor: not-allowed;
 }
+
+/* ============================================================
+   FLOOR MANAGEMENT: EDIT ASSIGNMENT
+   ============================================================ */
+
+.fm-form-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+.fm-card-editing {
+    border-color: #2563EB;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+.fm-btn-save:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+.fm-btn-cancel {
+    width: 100%;
+    margin-top: 12px;
+}
+
+.fm-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.btn-icon-edit:hover {
+    background: #EFF6FF;
+    color: #2563EB;
+    border-color: #93C5FD;
+}
+.btn-icon-delete:focus-visible {
+    outline: 2px solid #2563EB;
+    outline-offset: 2px;
+}
+
+.fm-row-editing td {
+    background: #EFF6FF;
+}
+
+.fm-dropdown-item--selected {
+    background: #EFF6FF;
+    font-weight: 600;
+}

@@ -164,16 +164,11 @@ export function AppProvider({ children }) {
     }, [buildingId]);
 
     // ── Floor actions ──
-    const addFloor = useCallback(async (name, wardenName) => {
-        if (isOnline && supabase) {
-            // Find warden by name
-            const { data: wardenData } = await supabase
-                .from('personnel')
-                .select('id')
-                .eq('name', wardenName)
-                .limit(1);
+    // Warden direferensikan via ID (bukan nama) agar aman jika ada nama duplikat
+    const addFloor = useCallback(async (name, wardenId) => {
+        const wardenName = personnel.find(p => p.id === wardenId)?.name || '';
 
-            const wardenId = wardenData?.[0]?.id || null;
+        if (isOnline && supabase) {
             const floorNum = parseInt(name.replace(/\D/g, '')) || (floors.length + 1);
 
             const { data, error } = await supabase
@@ -182,7 +177,7 @@ export function AppProvider({ children }) {
                     building_id: buildingId,
                     name,
                     floor_number: floorNum,
-                    warden_id: wardenId,
+                    warden_id: wardenId || null,
                     count_m: 0,
                     count_dk: 0,
                     count_oc: 0,
@@ -191,17 +186,48 @@ export function AppProvider({ children }) {
                 .select('*, warden:personnel(name)')
                 .single();
 
-            if (data && !error) {
-                setFloors(prev => [...prev, { ...data, warden: data.warden?.name || wardenName }]);
+            if (error) {
+                console.error('Failed to add floor:', error);
+                return { error };
             }
+            setFloors(prev => [...prev, { ...data, warden: data.warden?.name || wardenName }]);
         } else {
             // Fallback local
             setFloors(prev => {
                 const id = `f${Date.now()}`;
-                return [...prev, { id, name, floor_number: (prev.length + 1), warden: wardenName, count_m: 0, count_dk: 0, count_oc: 0, status: 'clear', updated_at: new Date().toISOString() }];
+                return [...prev, { id, name, floor_number: (prev.length + 1), warden_id: wardenId, warden: wardenName, count_m: 0, count_dk: 0, count_oc: 0, status: 'clear', updated_at: new Date().toISOString() }];
             });
         }
-    }, [isOnline, buildingId, floors.length]);
+        return { error: null };
+    }, [isOnline, buildingId, floors.length, personnel]);
+
+    // Edit lantai yang sudah ada: nama lantai + warden yang ditugaskan
+    const updateFloor = useCallback(async (id, { name, wardenId }) => {
+        const wardenName = personnel.find(p => p.id === wardenId)?.name || '';
+        const changes = { name, warden_id: wardenId || null };
+
+        // floor_number dipakai untuk urutan; update hanya jika nama mengandung angka
+        const parsedNum = parseInt(name.replace(/\D/g, ''));
+        if (!Number.isNaN(parsedNum)) changes.floor_number = parsedNum;
+
+        if (isOnline && supabase) {
+            const { data, error } = await supabase
+                .from('floors')
+                .update(changes)
+                .eq('id', id)
+                .select('*, warden:personnel(name)')
+                .single();
+
+            if (error) {
+                console.error('Failed to update floor:', error);
+                return { error };
+            }
+            setFloors(prev => prev.map(f => f.id === id ? { ...data, warden: data.warden?.name || '' } : f));
+        } else {
+            setFloors(prev => prev.map(f => f.id === id ? { ...f, ...changes, warden: wardenName } : f));
+        }
+        return { error: null };
+    }, [isOnline, personnel]);
 
     const deleteFloor = useCallback(async (id) => {
         if (isOnline && supabase) {
@@ -359,6 +385,7 @@ export function AppProvider({ children }) {
         id: f.id,
         name: f.name,
         floor_number: f.floor_number,
+        warden_id: f.warden_id || null,
         warden: f.warden || '',
         m: f.count_m ?? 0,
         dk: f.count_dk ?? 0,
@@ -381,6 +408,7 @@ export function AppProvider({ children }) {
         personnel: mappedPersonnel,
         incidents,
         addFloor,
+        updateFloor,
         deleteFloor,
         updateFloorCounts,
         addPersonnel,
