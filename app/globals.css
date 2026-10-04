@@ -1407,6 +1407,40 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
     color: var(--text-primary);
 }
 
+/* Nama kejadian (inline edit) */
+.il-name-cell {
+    min-width: 220px;
+}
+.il-name-view,
+.il-name-edit {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.il-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    word-break: break-word;
+}
+.il-name--empty {
+    font-weight: 400;
+    font-style: italic;
+    color: var(--text-tertiary);
+}
+.il-name-view .btn-icon-delete,
+.il-name-edit .btn-icon-delete {
+    flex-shrink: 0;
+}
+.il-name-view .btn-icon-delete:disabled,
+.il-name-edit .btn-icon-delete:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.il-name-input {
+    padding: 8px 10px;
+    min-width: 0;
+}
+
 /* ============================================================
    INITIALS AVATAR
    ============================================================ */

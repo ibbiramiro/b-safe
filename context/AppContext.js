@@ -5,6 +5,9 @@ import { supabase } from '../lib/supabase';
 
 const AppContext = createContext(null);
 
+// Sama dengan CHECK constraint incidents_name_check di database
+export const INCIDENT_NAME_MAX = 100;
+
 // ── Fallback data when Supabase is not connected ──
 const fallbackFloors = [
     { id: 'f1', name: 'Floor 9', floor_number: 9, warden: 'Ahmad S.', count_m: 10, count_dk: 2, count_oc: 0, status: 'clear', updated_at: new Date().toISOString() },
@@ -107,6 +110,7 @@ export function AppProvider({ children }) {
                     if (incidentsData) {
                         setIncidents(incidentsData.map(inc => ({
                             id: inc.id,
+                            name: inc.incident_name || '',
                             date: inc.created_at,
                             totalM: inc.total_m,
                             totalDK: inc.total_dk,
@@ -337,6 +341,7 @@ export function AppProvider({ children }) {
 
         const snapshot = {
             id: Date.now().toString(),
+            name: '',
             date: new Date().toISOString(),
             totalM,
             totalDK,
@@ -380,6 +385,26 @@ export function AppProvider({ children }) {
         })));
     }, [floors, isOnline, buildingId]);
 
+    // Label nama kejadian. String kosong disimpan sebagai NULL (belum diberi nama).
+    const updateIncidentName = useCallback(async (id, name) => {
+        const trimmed = (name || '').trim().slice(0, INCIDENT_NAME_MAX);
+        const incident_name = trimmed || null;
+
+        if (isOnline && supabase) {
+            const { error } = await supabase
+                .from('incidents')
+                .update({ incident_name })
+                .eq('id', id);
+
+            if (error) {
+                console.error('Failed to update incident name:', error);
+                return { error };
+            }
+        }
+        setIncidents(prev => prev.map(inc => inc.id === id ? { ...inc, name: trimmed } : inc));
+        return { error: null };
+    }, [isOnline]);
+
     // ── Mapped values for components (backward compatible) ──
     const mappedFloors = floors.map(f => ({
         id: f.id,
@@ -415,6 +440,7 @@ export function AppProvider({ children }) {
         updatePersonnel,
         deletePersonnel,
         createIncident,
+        updateIncidentName,
         isOnline,
         loading,
     };

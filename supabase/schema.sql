@@ -152,6 +152,8 @@ update public.floors set warden_id = (
 create table public.incidents (
     id uuid not null default gen_random_uuid(),
     building_id uuid not null references public.buildings(id) on delete cascade,
+    -- Label nama kejadian, diisi/diedit admin di Incident Logs (NULL = belum diberi nama)
+    incident_name text,
     total_m int not null default 0,
     total_dk int not null default 0,
     total_oc int not null default 0,
@@ -160,7 +162,12 @@ create table public.incidents (
     created_at timestamptz not null default now(),
     closed_at timestamptz,
 
-    constraint incidents_pkey primary key (id)
+    constraint incidents_pkey primary key (id),
+    constraint incidents_name_check
+        check (
+            incident_name is null
+            or (char_length(btrim(incident_name)) between 1 and 100)
+        )
 );
 
 
