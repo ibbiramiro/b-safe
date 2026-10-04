@@ -2,190 +2,185 @@
 
 import { useState } from 'react';
 import {
-    GearSix,
-    Warning,
-    ArrowCounterClockwise,
+    ShieldCheck,
     CheckCircle,
+    WarningCircle,
+    ArrowsClockwise,
+    CaretRight,
 } from '@phosphor-icons/react';
 import FloorDetail from './FloorDetail';
+import InitialsAvatar from './InitialsAvatar';
 import { useAppContext } from '../context/AppContext';
 
-function TileIcon({ icon }) {
-    if (!icon) return null;
+const BUILDING_NAME = 'BINUS @Medan - Gedung Utama';
 
-    switch (icon) {
-        case 'check':
-            return (
-                <div className="m-tile-icon m-tile-icon--green">
-                    <CheckCircle weight="fill" />
-                </div>
-            );
-        case 'warning':
-            return (
-                <div className="m-tile-icon m-tile-icon--warning">
-                    <Warning weight="fill" />
-                </div>
-            );
-        case 'refresh':
-            return (
-                <div className="m-tile-icon m-tile-icon--orange">
-                    <ArrowCounterClockwise weight="bold" />
-                </div>
-            );
-        default:
-            return null;
-    }
+// Konfigurasi tampilan per status lantai
+const STATUS_META = {
+    clear: { label: 'Aman', Icon: CheckCircle },
+    reporting: { label: 'Melapor', Icon: ArrowsClockwise },
+    unreported: { label: 'Belum Lapor', Icon: WarningCircle },
+};
+
+// "Floor 9" -> "9", "Lantai L" -> "L"
+function floorShortLabel(floor) {
+    const short = (floor.name || '').replace(/^(floor|lantai)\s*/i, '').trim();
+    return short || String(floor.floor_number ?? '?');
 }
 
-function MobileTile({ data, onClick }) {
-    let borderClass = 'm-tile';
-    if (data.borderStyle === 'red') borderClass += ' m-tile--border-red';
-    else if (data.borderStyle === 'orange') borderClass += ' m-tile--border-orange';
-    else if (data.borderStyle === 'green-left') borderClass += ' m-tile--border-green-left';
-
-    const pad = (num) => String(num).padStart(2, '0');
+function FloorTile({ floor, onSelect }) {
+    const status = STATUS_META[floor.status] ? floor.status : 'unreported';
+    const { label, Icon } = STATUS_META[status];
+    const hasReport = status !== 'unreported' || floor.m > 0 || floor.dk > 0 || floor.oc > 0;
+    const shortLabel = floorShortLabel(floor);
 
     return (
-        <div className={borderClass} onClick={() => onClick(data)}>
-            {/* Big faded floor number */}
-            <span className="m-tile-floor-num">{data.floor}</span>
-
-            {data.type === 'name-only' ? (
-                <span className="m-tile-warden-vertical">{data.warden || 'Tanpa Warden'}</span>
-            ) : (
-                <div className="m-tile-stats-content">
-                    <div className="m-tile-stats">
-                        <div className="m-stat-line">
-                            <span className="m-stat-val">{pad(data.m)}</span>
-                            <span className="m-stat-lbl m-stat-lbl--m">M</span>
-                        </div>
-                        <div className="m-stat-line">
-                            <span className="m-stat-val">{pad(data.dk)}</span>
-                            <span className="m-stat-lbl m-stat-lbl--dk">DK</span>
-                        </div>
-                        <div className="m-stat-line">
-                            <span className="m-stat-val">{pad(data.oc)}</span>
-                            <span className="m-stat-lbl m-stat-lbl--oc">OC</span>
-                        </div>
-                    </div>
-                    <span className="m-tile-warden-bottom">{data.warden || 'Tanpa Warden'}</span>
+        <button
+            type="button"
+            className={`mv-tile mv-tile--${status}`}
+            onClick={() => onSelect(floor)}
+            aria-label={`${floor.name}, status ${label}, warden ${floor.warden || 'belum ada'}`}
+        >
+            <div className="mv-tile-top">
+                <div className="mv-tile-floor">
+                    <span className="mv-tile-floor-label">Lantai</span>
+                    <span className="mv-tile-floor-num">{shortLabel}</span>
                 </div>
-            )}
+                <span className={`mv-status mv-status--${status}`}>
+                    <Icon weight="fill" aria-hidden="true" />
+                    {label}
+                </span>
+            </div>
 
-            <TileIcon icon={data.icon} />
-        </div>
+            <div className="mv-tile-counts">
+                <div className="mv-count">
+                    <span className="mv-count-val">{hasReport ? floor.m : '–'}</span>
+                    <span className="mv-count-lbl mv-count-lbl--m">M</span>
+                </div>
+                <div className="mv-count">
+                    <span className="mv-count-val">{hasReport ? floor.dk : '–'}</span>
+                    <span className="mv-count-lbl mv-count-lbl--dk">DK</span>
+                </div>
+                <div className="mv-count">
+                    <span className="mv-count-val">{hasReport ? floor.oc : '–'}</span>
+                    <span className="mv-count-lbl mv-count-lbl--oc">OC</span>
+                </div>
+            </div>
+
+            <div className="mv-tile-warden">
+                <InitialsAvatar name={floor.warden} size={22} />
+                <span className={floor.warden ? '' : 'mv-tile-warden--empty'}>
+                    {floor.warden || 'Belum ada warden'}
+                </span>
+                <CaretRight className="mv-tile-caret" aria-hidden="true" />
+            </div>
+        </button>
     );
 }
 
 export default function MobileView() {
     const { floors } = useAppContext();
-    const [selectedFloor, setSelectedFloor] = useState(null);
+    const [selectedFloorId, setSelectedFloorId] = useState(null);
 
-    // Map Supabase floors to the format MobileTile expects
-    const mobileTilesData = floors.map(f => {
-        let type = 'name-only';
-        let borderStyle = 'default';
-        let icon = null;
+    // Ambil data terbaru dari context (bukan snapshot) agar realtime ikut ter-update
+    const selectedFloor = floors.find(f => f.id === selectedFloorId);
 
-        if (f.status === 'clear') {
-            if (f.m > 0 || f.dk > 0 || f.oc > 0) {
-               type = 'stats';
-               borderStyle = 'green-left';
-               icon = 'check';
-            } else {
-               type = 'name-only';
-               borderStyle = 'default';
-            }
-        } else if (f.status === 'reporting') {
-            type = 'stats';
-            borderStyle = 'orange';
-            icon = 'refresh';
-        } else if (f.status === 'unreported') {
-            type = 'name-only';
-            borderStyle = 'red';
-            icon = 'warning';
-        }
-
-        return {
-            id: f.id,
-            floor: f.floor_number,
-            name: f.name,
-            warden: f.warden,
-            m: f.m,
-            dk: f.dk,
-            oc: f.oc,
-            status: f.status,
-            type,
-            borderStyle,
-            icon
-        };
-    });
-
-    const totalM = mobileTilesData.reduce((acc, curr) => acc + (parseInt(curr.m) || 0), 0);
-    const totalDK = mobileTilesData.reduce((acc, curr) => acc + (parseInt(curr.dk) || 0), 0);
-    const totalOC = mobileTilesData.reduce((acc, curr) => acc + (parseInt(curr.oc) || 0), 0);
-
-    if (selectedFloor !== null) {
+    if (selectedFloor) {
         return (
             <FloorDetail
-                floorData={selectedFloor}
-                onBack={() => setSelectedFloor(null)}
+                floorData={{ ...selectedFloor, label: floorShortLabel(selectedFloor) }}
+                onBack={() => setSelectedFloorId(null)}
             />
         );
     }
 
+    const toNum = (v) => parseInt(v) || 0;
+    const totalM = floors.reduce((acc, f) => acc + toNum(f.m), 0);
+    const totalDK = floors.reduce((acc, f) => acc + toNum(f.dk), 0);
+    const totalOC = floors.reduce((acc, f) => acc + toNum(f.oc), 0);
+    const grandTotal = totalM + totalDK + totalOC;
+
+    const countBy = (status) => floors.filter(f => f.status === status).length;
+    const clearCount = countBy('clear');
+    const reportingCount = countBy('reporting');
+    const unreportedCount = floors.length - clearCount - reportingCount;
+    const progress = floors.length ? Math.round((clearCount / floors.length) * 100) : 0;
+
     return (
         <div className="mobile-view">
             {/* Header */}
-            <header className="m-header">
-                <span className="m-logo">B-Safe</span>
-                <div className="m-header-icons">
-                    <GearSix size={24} />
-                    <img
-                        src="https://i.pravatar.cc/80?img=47"
-                        alt="Profile"
-                        className="m-avatar"
-                    />
+            <header className="mv-header">
+                <div className="mv-brand">
+                    <ShieldCheck weight="fill" className="mv-brand-icon" aria-hidden="true" />
+                    <div className="mv-brand-text">
+                        <span className="mv-logo">B-Safe</span>
+                        <span className="mv-logo-sub">Emergency Response</span>
+                    </div>
                 </div>
+                <span className="mv-live" aria-label="Data realtime">
+                    <span className="mv-live-dot" aria-hidden="true"></span>
+                    LIVE
+                </span>
             </header>
 
-            {/* Title */}
-            <div className="m-title-section">
-                <h1 className="m-title">Pilih Lantai Evakuasi</h1>
-                <p className="m-subtitle">BINUS @Medan - Gedung Utama</p>
-            </div>
+            {/* Intro + progress */}
+            <section className="mv-intro">
+                <p className="mv-eyebrow">{BUILDING_NAME}</p>
+                <h1 className="mv-title">Pilih Lantai Evakuasi</h1>
 
-            {/* Divider */}
-            <hr className="m-divider" />
+                <div className="mv-progress-card">
+                    <div className="mv-progress-head">
+                        <span>Progres Sweeping</span>
+                        <strong>{clearCount}/{floors.length} lantai aman</strong>
+                    </div>
+                    <div
+                        className="mv-progress-bar"
+                        role="progressbar"
+                        aria-valuenow={progress}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label="Persentase lantai aman"
+                    >
+                        <span style={{ width: `${progress}%` }}></span>
+                    </div>
+                    <div className="mv-legend">
+                        <span><i className="mv-dot mv-dot--clear"></i>Aman {clearCount}</span>
+                        <span><i className="mv-dot mv-dot--reporting"></i>Melapor {reportingCount}</span>
+                        <span><i className="mv-dot mv-dot--unreported"></i>Belum {unreportedCount}</span>
+                    </div>
+                </div>
+            </section>
 
             {/* Floor Grid */}
-            <div className="m-grid">
-                {mobileTilesData.map((tile) => (
-                    <MobileTile
-                        key={tile.id}
-                        data={tile}
-                        onClick={setSelectedFloor}
-                    />
+            <section className="mv-grid" aria-label="Daftar lantai">
+                {floors.map((floor) => (
+                    <FloorTile key={floor.id} floor={floor} onSelect={(f) => setSelectedFloorId(f.id)} />
                 ))}
-            </div>
+                {floors.length === 0 && (
+                    <p className="mv-empty">Belum ada lantai terdaftar.</p>
+                )}
+            </section>
 
-            {/* Fixed Bottom Navbar for Totals */}
-            <div className="m-bottom-nav">
-                <div className="m-bottom-stat">
-                    <span className="m-bottom-title">MAHASISWA</span>
-                    <span className="m-bottom-val val-m">{totalM}</span>
+            {/* Fixed bottom totals */}
+            <nav className="mv-totals" aria-label="Total dievakuasi">
+                <div className="mv-totals-head">
+                    <span>Total Dievakuasi</span>
+                    <strong>{grandTotal} orang</strong>
                 </div>
-                <div className="m-bottom-divider"></div>
-                <div className="m-bottom-stat">
-                    <span className="m-bottom-title">STAF</span>
-                    <span className="m-bottom-val val-dk">{totalDK}</span>
+                <div className="mv-totals-row">
+                    <div className="mv-total">
+                        <span className="mv-total-val val-m">{totalM}</span>
+                        <span className="mv-total-lbl">Mahasiswa</span>
+                    </div>
+                    <div className="mv-total">
+                        <span className="mv-total-val val-dk">{totalDK}</span>
+                        <span className="mv-total-lbl">Staf</span>
+                    </div>
+                    <div className="mv-total">
+                        <span className="mv-total-val val-oc">{totalOC}</span>
+                        <span className="mv-total-lbl">Outsourcing</span>
+                    </div>
                 </div>
-                <div className="m-bottom-divider"></div>
-                <div className="m-bottom-stat">
-                    <span className="m-bottom-title">OUTSOURCING</span>
-                    <span className="m-bottom-val val-oc">{totalOC}</span>
-                </div>
-            </div>
+            </nav>
         </div>
     );
 }
