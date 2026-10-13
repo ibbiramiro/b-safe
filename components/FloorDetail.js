@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
     ArrowLeft,
     CheckCircle,
@@ -28,7 +28,7 @@ const STATUS_META = {
 };
 
 export default function FloorDetail({ floorData, onBack }) {
-    const { updateFloorCounts } = useAppContext();
+    const { markFloorReporting, updateFloorCounts } = useAppContext();
     const [counts, setCounts] = useState({
         m: floorData?.m || 0,
         dk: floorData?.dk || 0,
@@ -37,6 +37,11 @@ export default function FloorDetail({ floorData, onBack }) {
     const [isDirty, setIsDirty] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [syncError, setSyncError] = useState('');
+
+    // Satu request reporting per sesi edit. Promise ini juga ditunggu sebelum submit
+    // supaya request reporting yang lambat tidak menimpa status final "clear".
+    const reportingRequestRef = useRef(null);
 
     const floorLabel = floorData?.label || floorData?.floor_number || '?';
 
@@ -44,10 +49,39 @@ export default function FloorDetail({ floorData, onBack }) {
     const status = saved ? 'clear' : isDirty ? 'reporting' : (floorData?.status || 'unreported');
     const { label: statusLabel, Icon: StatusIcon } = STATUS_META[status] || STATUS_META.unreported;
 
+    const beginReporting = () => {
+        if (!floorData?.id) {
+            return Promise.resolve({ error: new Error('Floor ID tidak tersedia.') });
+        }
+
+        if (!reportingRequestRef.current) {
+            const request = markFloorReporting(floorData.id)
+                .catch(error => ({ error }));
+            reportingRequestRef.current = request;
+
+            // Jika gagal, izinkan klik berikutnya atau submit untuk mencoba ulang.
+            void request.then(({ error }) => {
+                if (error && reportingRequestRef.current === request) {
+                    reportingRequestRef.current = null;
+                }
+            });
+        }
+
+        return reportingRequestRef.current;
+    };
+
     const change = (key, delta) => {
         setCounts(prev => ({ ...prev, [key]: Math.max(0, prev[key] + delta) }));
         setIsDirty(true);
         setSaved(false);
+        setSyncError('');
+
+        // Count masih berupa draft lokal; hanya status proses yang dibagikan realtime.
+        void beginReporting().then(({ error }) => {
+            if (error) {
+                setSyncError('Status proses belum tersinkron. Periksa koneksi lalu coba lagi.');
+            }
+        });
     };
 
     const total = counts.m + counts.dk + counts.oc;
@@ -56,8 +90,32 @@ export default function FloorDetail({ floorData, onBack }) {
     const handleClear = async () => {
         if (!floorData?.id || saving) return;
         setSaving(true);
-        await updateFloorCounts(floorData.id, counts.m, counts.dk, counts.oc, 'clear');
+        setSyncError('');
+
+        // Selalu selesaikan write "reporting" terlebih dahulu untuk mencegah race condition.
+        if (isDirty) {
+            const { error: reportingError } = await beginReporting();
+            if (reportingError) {
+                setSaving(false);
+                setSyncError('Gagal menyinkronkan status proses. Silakan coba simpan kembali.');
+                return;
+            }
+        }
+
+        const { error } = await updateFloorCounts(
+            floorData.id,
+            counts.m,
+            counts.dk,
+            counts.oc,
+            'clear'
+        );
         setSaving(false);
+
+        if (error) {
+            setSyncError('Headcount gagal disimpan. Data Anda masih ada, silakan coba lagi.');
+            return;
+        }
+
         setSaved(true);
         setIsDirty(false);
         // Kembali ke daftar setelah menampilkan status sukses sebentar
@@ -126,6 +184,7 @@ export default function FloorDetail({ floorData, onBack }) {
                     <span>Total di lantai ini</span>
                     <strong>{total} orang</strong>
                 </div>
+                {syncError && <p className="fd-sync-error" role="alert">{syncError}</p>}
                 <button
                     className={`fd-clear-btn ${saved ? 'fd-clear-btn--active' : ''}`}
                     onClick={handleClear}

@@ -12,7 +12,11 @@ export default function FloorGrid() {
                 <FloorCard key={floor.id} data={{
                     ...floor,
                     label: floor.name,
-                    alertLabel: floor.status === 'unreported' && !floor.warden ? 'Unresponsive' : null,
+                    alertLabel: floor.status === 'reporting'
+                        ? 'Sedang Mengisi Headcount'
+                        : floor.status === 'unreported' && !floor.warden
+                            ? 'Unresponsive'
+                            : null,
                     footerAlert: floor.status === 'unreported' && !floor.warden ? 'Requires Warden Check' : null,
                     updated: floor.updated ? `Updated: ${floor.updated}` : '',
                 }} />

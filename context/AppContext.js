@@ -245,6 +245,29 @@ export function AppProvider({ children }) {
         return { error: null };
     }, [isOnline]);
 
+    // Tandai bahwa warden mulai mengisi headcount. Count tetap lokal sampai laporan disubmit.
+    // Perubahan status ini dikirim ke Supabase agar semua dashboard melihat prosesnya via Realtime.
+    const markFloorReporting = useCallback(async (id) => {
+        const timestamp = new Date().toISOString();
+
+        if (isOnline && supabase) {
+            const { error } = await supabase
+                .from('floors')
+                .update({ status: 'reporting', updated_at: timestamp })
+                .eq('id', id);
+
+            if (error) {
+                console.error('Failed to mark floor as reporting:', error);
+                return { error };
+            }
+        }
+
+        setFloors(prev => prev.map(f => f.id === id
+            ? { ...f, status: 'reporting', updated_at: timestamp }
+            : f));
+        return { error: null };
+    }, [isOnline]);
+
     const updateFloorCounts = useCallback(async (id, count_m, count_dk, count_oc, status) => {
         const timestamp = new Date().toISOString();
         if (isOnline && supabase) {
@@ -252,16 +275,17 @@ export function AppProvider({ children }) {
                 .from('floors')
                 .update({ count_m, count_dk, count_oc, status, updated_at: timestamp })
                 .eq('id', id);
-            
-            if (!error) {
-                setFloors(prev => prev.map(f => f.id === id ? { ...f, count_m, count_dk, count_oc, status, updated_at: timestamp } : f));
-            } else {
-                console.error("Failed to update floor in supabase:", error);
+
+            if (error) {
+                console.error('Failed to update floor in supabase:', error);
+                return { error };
             }
-        } else {
-            // Fallback local
-            setFloors(prev => prev.map(f => f.id === id ? { ...f, count_m, count_dk, count_oc, status, updated_at: timestamp } : f));
         }
+
+        setFloors(prev => prev.map(f => f.id === id
+            ? { ...f, count_m, count_dk, count_oc, status, updated_at: timestamp }
+            : f));
+        return { error: null };
     }, [isOnline]);
 
     // ── Personnel actions ──
@@ -435,6 +459,7 @@ export function AppProvider({ children }) {
         addFloor,
         updateFloor,
         deleteFloor,
+        markFloorReporting,
         updateFloorCounts,
         addPersonnel,
         updatePersonnel,
