@@ -13,7 +13,7 @@ export default function FloorGrid() {
                     ...floor,
                     label: floor.name,
                     alertLabel: floor.status === 'reporting'
-                        ? 'Sedang Mengisi Headcount'
+                        ? 'Sedang Melapor'
                         : floor.status === 'unreported' && !floor.warden
                             ? 'Unresponsive'
                             : null,

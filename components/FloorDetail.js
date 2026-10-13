@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ArrowLeft,
     CheckCircle,
@@ -43,23 +43,24 @@ export default function FloorDetail({ floorData, onBack }) {
     // supaya request reporting yang lambat tidak menimpa status final "clear".
     const reportingRequestRef = useRef(null);
 
+    const floorId = floorData?.id;
     const floorLabel = floorData?.label || floorData?.floor_number || '?';
 
     // Status yang ditampilkan: jika user mengubah angka, dianggap sedang melapor
     const status = saved ? 'clear' : isDirty ? 'reporting' : (floorData?.status || 'unreported');
     const { label: statusLabel, Icon: StatusIcon } = STATUS_META[status] || STATUS_META.unreported;
 
-    const beginReporting = () => {
-        if (!floorData?.id) {
+    const beginReporting = useCallback(() => {
+        if (!floorId) {
             return Promise.resolve({ error: new Error('Floor ID tidak tersedia.') });
         }
 
         if (!reportingRequestRef.current) {
-            const request = markFloorReporting(floorData.id)
+            const request = markFloorReporting(floorId)
                 .catch(error => ({ error }));
             reportingRequestRef.current = request;
 
-            // Jika gagal, izinkan klik berikutnya atau submit untuk mencoba ulang.
+            // Jika gagal, izinkan efek, klik berikutnya, atau submit untuk mencoba ulang.
             void request.then(({ error }) => {
                 if (error && reportingRequestRef.current === request) {
                     reportingRequestRef.current = null;
@@ -68,7 +69,22 @@ export default function FloorDetail({ floorData, onBack }) {
         }
 
         return reportingRequestRef.current;
-    };
+    }, [floorId, markFloorReporting]);
+
+    // Begitu staf membuka halaman perhitungan, bagikan status proses ke dashboard admin.
+    useEffect(() => {
+        let active = true;
+
+        void beginReporting().then(({ error }) => {
+            if (active && error) {
+                setSyncError('Status proses belum tersinkron. Periksa koneksi lalu coba lagi.');
+            }
+        });
+
+        return () => {
+            active = false;
+        };
+    }, [beginReporting]);
 
     const change = (key, delta) => {
         setCounts(prev => ({ ...prev, [key]: Math.max(0, prev[key] + delta) }));
@@ -76,7 +92,8 @@ export default function FloorDetail({ floorData, onBack }) {
         setSaved(false);
         setSyncError('');
 
-        // Count masih berupa draft lokal; hanya status proses yang dibagikan realtime.
+        // Count masih berupa draft lokal. Pemanggilan ini hanya memastikan status proses
+        // tersinkron jika request awal saat halaman dibuka sempat gagal.
         void beginReporting().then(({ error }) => {
             if (error) {
                 setSyncError('Status proses belum tersinkron. Periksa koneksi lalu coba lagi.');
@@ -93,13 +110,11 @@ export default function FloorDetail({ floorData, onBack }) {
         setSyncError('');
 
         // Selalu selesaikan write "reporting" terlebih dahulu untuk mencegah race condition.
-        if (isDirty) {
-            const { error: reportingError } = await beginReporting();
-            if (reportingError) {
-                setSaving(false);
-                setSyncError('Gagal menyinkronkan status proses. Silakan coba simpan kembali.');
-                return;
-            }
+        const { error: reportingError } = await beginReporting();
+        if (reportingError) {
+            setSaving(false);
+            setSyncError('Gagal menyinkronkan status proses. Silakan coba simpan kembali.');
+            return;
         }
 
         const { error } = await updateFloorCounts(
